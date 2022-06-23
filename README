@@ -1,0 +1,178 @@
+Nume: Dragne Lavinia-Stefana
+Grupa: 334 CA
+
+				            SISTEME DE OPERARE
+				        Tema #4 - Planificator de thread-uri
+
+
+	Continutul proiectului este urmatorul:
+	
+	- so_scheduler.c, so_scheduler.h, helper.h
+	
+	- Makefile 
+
+	- acest fisier README.
+
+	* Organizare
+
+    * Linux
+
+    - Pe langa functiile de baza, am cateva functii ce ma ajuta in
+    implementare, pe care le-am plasat in fisierul helper.h. De asemenea,
+    acolo am declarate cele 2 structuri: thread si scheduler.
+    - Structura thread este utilizata pentru a simula caracteristicile
+    unui thread clasic, avand campurile asociate: priority, state (determina)
+    starea curenta a thread-ului (running, terminated etc), func (functia
+    asociata thread-ului), id si actual_quantum (timpul ramas din cuanta de
+    rulare pe procesor).
+    - Structura scheduler contine un vector de structuri thread, un vector
+    ce simuleaza o coada de prioritati, dimensiunea asociata cozii, id-ul si
+    thread-ul curent (care ruleaza pe procesor la acel moment), cuanta de timp,
+    numarul total de thread-uri instantiate si numarul de evenimente suportate.
+    - Pentru a planifica ordinea de executie a thread-urilor pe procesor am
+    folosit un vector de semafoare, fiecare semafor fiind asociat unui thread,
+    corespondenta realizandu-se prin id.
+    - Pentru a determina daca se incearca reinitializarea scheduler-ului am
+    folosit variabila init_scheduler, care dupa prima initializare va fi
+    INITIALIZED.
+    - Pentru a verifica daca toate thread-urile si-au terminat executia am
+    folosit semaforul sem_terminated.
+    
+    - so_init
+
+    - Am verificat parametrii primiti, am alocat si initializat scheduler-ul
+    si vectorul de semafoare.
+    - Thread-ul curent va fi initalizat cu id-ul INITIAL_THREAD (-1), pentru a
+    sugera ca inca nu ruleaza nimeni pe procesor.
+
+    - so_fork
+
+    - Verific ca scheduler-ul sa fie initializat si parametri primiti sa fie
+    corecti.
+    - Initializez, in vectorul de thread-uri din scheduler, thread-ul pe
+    care urmeaza sa-l creez cu pthread_create.
+    - Initializez semaforul corespunzator id-ului thread-ului cu 0.
+    - Creez thread-ul, il adaug in coada de prioritati si cresc contorul
+    pentru numarul total de thread-uri create.
+    -  Add-ul in coada de prioritati se face astfel: se compara prioritatea
+    thread-ului nou creat, pe rand, cu prioritatile din coada. Cand se gaseste
+    o prioritate mai mica decat a celui nou creat, se adauga thread-ul pe
+    pozitia actuala, shiftandu-se restul elementelor din vector, la dreapta,
+    cu o pozitie. Se creste dimensiunea cozii.
+    - Functia care determina contextul de executare al unui thread este
+    start_thread. Aici, thread-ul asteapta sa fie planificat, facandu-se wait
+    pe semaforul sau, executa rutina primita, este marcat ca si terminat si
+    se face replanificare.
+    - In final, in functia so_fork se face planificarea thread-urilor, cu
+    ajutorul functiei so_exec.
+    - Functia schedule planificare executia pe procesor. 
+    Se verifica in ce stare a executiei ne aflam:
+        1. thread-ul curent a terminat de executat si coada este goala
+        deci functia de planificare se termina
+        2. nu a existat inca niciun thread planificat, deci se va extrage
+        primul din coada, daca acesta exista
+        3. a mai existat un thread care a rulat inainte:
+            a. coada nu e goala, dar thread-ul curent a terminat sau
+            este in stare de asteptare, deci se va extrage primul din
+            coada, folosind functia curr_comes_from_queue (alege 
+            primul element din coada, il elimina si il lasa sa-si
+            execute rutina, marcandu-l ca si curent)
+            b. thread-ul curent nu a terminat, dar exista un thread cu
+            o prioritate mai mare in coada, deci acesta va fi inlocuit,
+            folosindu-se functia switch_threads (este extras primul din
+            coada, marcat ca si curent si introdus in coada fostul
+            curent)
+            c. thread-ul curent nu a terminat, dar i-a expirat cuanta
+            si exista un thread cu o prioritate egala in coada, care
+            ii va lua locul
+            d. nu exista o prioritate mai mare sau egala in coada
+            decat cea a actualului, deci va rula tot acesta,
+            resetandu-i-se cuanta
+
+    - so_exec
+
+    - Se scade cuanta de timp. Se retine id-ul thread-ului actual,
+    se face replanificare si daca fostul thread curent, a existat
+    (nu avea id-ul -1) se blocheaza in asteptare, pana va reintra
+    in executie, facandu-i-se wait pe semafor.
+
+    - so_wait
+
+    - Am memorat intr-o matrice (waiting_threads) thread-urile
+    care se afla in stare de waiting, linia fiind corespunzatoare
+    io-ului ce il poate debloca. Pentru a retine cate elemente
+    sunt pe o linie, am folosit vectorul waiting_size.
+    - Se verifica validitatea parametrilor, se adauga thread-ul
+    in matricea de asteptare, pe pozitia corespunzatoare, se
+    marcheaza ca fiind in starea de waiting thread-ul curent si
+    se face replanificare.
+
+    - so_signal
+
+    - Verific validitatea parametrilor si pentru fiecare thread din
+    matrice ce este trezit de acel eveniment il marchez ca fiind in
+    starea READY, il adaug in coada de prioritati si resetez contorul
+    pentru numarul de thread-uri din matrice.
+    - In final, se face replanificare.
+
+    - so_end
+
+    - Se asteapta terminarea thread-urilor, se elibereaza resursele,
+    se dezaloca memoria si se seteaza ca neinitializat scheduler-ul.
+
+
+    * Windows 
+
+    - Logica implementarii pe Windows este aceeasi, doar ca in locul
+    functiilor din POSIX s-au folosit analoagele:
+
+        pthread_create - CreateThread (cu rutina start_thread)
+        pthread_join - WaitForSingleObject
+        pthread_mutex_init - CreateMutex
+        pthread_mutex_destroy - CloseHandle
+        pthread_mutex_lock - WaitForSingleObject
+        pthread_mutex_unlock - ReleaseMutex
+        sem_init - CreateSemaphore (s-au folosit semafoare binare)
+        sem_destroy - CloseHandle
+        sem_wait - WaitForSingleObject
+        sem_post - ReleaseSemaphore
+
+    - Structurile scheduler si thread au aceleasi campuri, ca in
+    implememtarea de Linux, doar ca se va tine cont ca functia
+    CreateThread va obtine un HANDLE pentru firul de executie creat.
+    - Vectorul de semafoare folosit pentru ordonarea thread-urilor
+    la executie se transforma intr-un vector de handle-uri.
+
+
+    * Implementare
+    - Am implementat intreaga functionalitate.
+
+    * Cum se compileaza
+
+    - Linux: make
+    - Windows: nmake
+
+    * Git
+
+    - Link repo (privat): https://github.com/laviniadragne/Thread-scheduler
+
+	* Bibliografie:
+    1. https://github.com/systems-cs-pub-ro/so/blob/master/assignments/3-loader/skel-lin/Makefile
+    2. https://github.com/systems-cs-pub-ro/so/blob/master/assignments/3-loader/skel-win/Makefile
+
+	
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                         
